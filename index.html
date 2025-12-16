@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Roots | Biosonificación 432Hz</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #1a2f23; /* Verde bosque profundo */
+            --text-color: #e8e6d9; /* Beige orgánico */
+            --accent-color: #a3b18a; /* Verde salvia */
+            --circle-color: rgba(232, 230, 217, 0.05); /* Más sutil */
+            --circle-active: rgba(232, 230, 217, 0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Helvetica Neue', sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            transition: background-color 2s ease;
+        }
+
+        h1 {
+            font-weight: 300;
+            letter-spacing: 0.2em;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            z-index: 10;
+        }
+
+        #status {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            margin-bottom: 2rem;
+            font-family: monospace;
+            text-align: center;
+            z-index: 10;
+            min-height: 1.5em; /* Evita saltos si el texto cambia */
+        }
+
+        button {
+            background: transparent;
+            border: 1px solid var(--accent-color);
+            color: var(--text-color);
+            padding: 15px 30px;
+            font-size: 1rem;
+            letter-spacing: 0.1em;
+            cursor: pointer;
+            transition: all 0.5s ease;
+            border-radius: 50px;
+            z-index: 10;
+        }
+
+        button:hover {
+            background: var(--accent-color);
+            color: var(--bg-color);
+        }
+
+        #visual-anchor {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            height: 300px;
+            z-index: 1;
+        }
+
+        .orb {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: var(--circle-color);
+            transform: scale(1);
+            transition: transform 0.4s ease-out, background 0.4s ease-out;
+            filter: blur(30px); /* Más difuso para ser más suave */
+        }
+
+        .orb.pulse {
+            transform: scale(1.4);
+            background: var(--circle-active);
+            transition: transform 0.1s ease-out, background 0.1s ease-out;
+        }
+
+        .orb.disconnected {
+            background: transparent;
+            transform: scale(0.1);
+            transition: transform 2s ease-in-out, background 2s ease;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <h1>LIVE ROOTS</h1>
+    <div id="status">Esperando interacción humana...</div>
+    
+    <button id="start-btn">INICIAR EXPERIENCIA</button>
+
+    <div id="visual-anchor">
+        <div class="orb disconnected" id="orb"></div>
+    </div>
+
+    <script>
+        // ==========================================
+        // CONFIGURACIÓN DE AUDIO Y LÓGICA
+        // ==========================================
+
+        let isAudioStarted = false;
+        let midiAccess = null;
+        let lastNoteTime = 0;
+
+        // --- AJUSTES DE SENSIBILIDAD ---
+        const MIN_NOTE_INTERVAL = 150; 
+        const BREATH_ATTACK = 2;       
+        const BREATH_DECAY = 5;        // Decay más largo para suavidad
+        const BASE_FILTER_FREQ = 120;  // Hz. MUY grave y suave (casi silencio)
+        const PEAK_FILTER_FREQ = 800;  // Hz. Menos brillo máximo para no molestar
+        // -------------------------------
+
+        const startBtn = document.getElementById('start-btn');
+        const statusDiv = document.getElementById('status');
+        const orb = document.getElementById('orb');
+
+        let synth, ambientNoise, ambientFilter, reverb, delay;
+        const PENTATONIC_SCALE = [0, 3, 5, 7, 10]; 
+
+        // ==========================================
+        // 1. INICIO DEL SISTEMA
+        // ==========================================
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                startBtn.innerText = "CONECTANDO...";
+                await Tone.start();
+                
+                setupAudioEngine();
+                setupMIDI(); // Aquí se decide si suena o no según la conexión
+                
+                startBtn.classList.add('hidden');
+                isAudioStarted = true;
+                
+            } catch (e) {
+                console.error(e);
+                statusDiv.innerText = "Error: " + e.message;
+            }
+        });
+
+        // ==========================================
+        // 2. MOTOR DE AUDIO (MÁS SUAVE)
+        // ==========================================
+
+        function setupAudioEngine() {
+            // A. MELODÍA (Cristal / Kalimba Suave)
+            synth = new Tone.PolySynth(Tone.FMSynth, {
+                harmonicity: 3,
+                modulationIndex: 8, // Menos índice para sonido más dulce
+                oscillator: { type: "sine" },
+                envelope: {
+                    attack: 0.05, // Ataque más lento
+                    decay: 1.5,
+                    sustain: 0.1,
+                    release: 5 
+                },
+                modulation: { type: "sine" }, // Sine en modulación es más suave que Square
+                modulationEnvelope: {
+                    attack: 0.5,
+                    decay: 0,
+                    sustain: 1,
+                    release: 0.5
+                }
+            });
+
+            // B. AMBIENTE (Sintético y Sutil)
+            ambientNoise = new Tone.Noise("pink"); 
+            ambientFilter = new Tone.Filter(BASE_FILTER_FREQ, "lowpass");
+            
+            ambientNoise.connect(ambientFilter);
+            ambientFilter.toDestination();
+            
+            // VOLUMEN INICIAL: Muteado (-100). 
+            // La función updateConnectionState() lo subirá si hay conexión.
+            ambientNoise.volume.value = -100; 
+            ambientNoise.start();
+
+            // C. EFECTOS
+            reverb = new Tone.Reverb({ decay: 8, wet: 0.7 }).toDestination(); // Más reverb
+            delay = new Tone.PingPongDelay({ delayTime: "4n", feedback: 0.3, wet: 0.3 }).connect(reverb);
+            synth.connect(delay);
+            
+            // Master Volume
+            Tone.Destination.volume.value = -100; // Empezamos en silencio absoluto
+        }
+
+        // ==========================================
+        // 3. LÓGICA MIDI Y ESTADO DE CONEXIÓN
+        // ==========================================
+
+        function setupMIDI() {
+            if (navigator.requestMIDIAccess) {
+                navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+            } else {
+                statusDiv.innerText = "Tu navegador no soporta Web MIDI API.";
+            }
+        }
+
+        function onMIDISuccess(midi) {
+            midiAccess = midi;
+            
+            // Verificar estado inicial
+            updateConnectionState(midiAccess);
+
+            // Escuchar cambios de conexión (Enchufar/Desenchufar)
+            midiAccess.onstatechange = (e) => {
+                console.log("Cambio de estado MIDI:", e.port.state);
+                updateConnectionState(midiAccess);
+            };
+
+            // Asignar listeners a las entradas activas
+            for (let input of midiAccess.inputs.values()) {
+                input.onmidimessage = handleMIDIMessage;
+            }
+        }
+
+        // --- FUNCIÓN CLAVE: GESTIÓN DE ENERGÍA/SONIDO ---
+        function updateConnectionState(midi) {
+            const inputs = Array.from(midi.inputs.values());
+            const isConnected = inputs.length > 0 && inputs.some(i => i.state !== 'disconnected');
+
+            if (isConnected) {
+                // HAY CONEXIÓN: Encender sistema
+                statusDiv.innerText = "Conectado con la Naturaleza";
+                statusDiv.style.color = "#a3b18a";
+                orb.classList.remove('disconnected');
+                
+                // Fade In del volumen (Subir volumen suavemente en 3 segundos)
+                // El volumen destino es -5dB (Master) y -28dB (Ruido)
+                Tone.Destination.volume.rampTo(-5, 3);
+                if(ambientNoise) ambientNoise.volume.rampTo(-28, 3); 
+
+            } else {
+                // NO HAY CONEXIÓN: Apagar sistema
+                statusDiv.innerText = "Esperando conexión MIDI... (Dispositivo desconectado)";
+                statusDiv.style.color = "#e8e6d9";
+                orb.classList.add('disconnected');
+                
+                // Fade Out (Bajar a silencio en 2 segundos)
+                Tone.Destination.volume.rampTo(-100, 2);
+                if(ambientNoise) ambientNoise.volume.rampTo(-100, 2);
+            }
+        }
+
+        function onMIDIFailure() {
+            statusDiv.innerText = "Error: No se pudo acceder a MIDI.";
+        }
+
+        // ==========================================
+        // 4. PROCESAMIENTO
+        // ==========================================
+
+        function handleMIDIMessage(message) {
+            const command = message.data[0];
+            const noteRaw = message.data[1];
+            const velocity = (message.data.length > 2) ? message.data[2] : 0;
+
+            if (command === 144 && velocity > 0) {
+                triggerPlantEvent(noteRaw, velocity);
+            }
+        }
+
+        function midiToFreq432(midiNote) {
+            return 432 * Math.pow(2, (midiNote - 69) / 12);
+        }
+
+        function quantizeToScale(midiNote) {
+            const octave = Math.floor(midiNote / 12);
+            const noteInOctave = midiNote % 12;
+            let closest = PENTATONIC_SCALE[0];
+            let minDiff = Math.abs(noteInOctave - closest);
+            for (let i = 1; i < PENTATONIC_SCALE.length; i++) {
+                let diff = Math.abs(noteInOctave - PENTATONIC_SCALE[i]);
+                if (diff < minDiff) { minDiff = diff; closest = PENTATONIC_SCALE[i]; }
+            }
+            return (octave * 12) + closest;
+        }
+
+        function triggerPlantEvent(rawNote, velocity) {
+            const now = Date.now();
+            if (now - lastNoteTime < MIN_NOTE_INTERVAL) return; 
+            lastNoteTime = now;
+
+            const quantizedNote = quantizeToScale(rawNote);
+            const frequency = midiToFreq432(quantizedNote);
+            const humanVel = (velocity / 127) * (0.8 + Math.random() * 0.2); 
+            
+            synth.triggerAttackRelease(frequency, "8n", Tone.now(), humanVel);
+
+            // La respiración modula desde el nuevo filtro base (120Hz)
+            ambientFilter.frequency.rampTo(PEAK_FILTER_FREQ, BREATH_ATTACK);
+            ambientFilter.frequency.rampTo(BASE_FILTER_FREQ, BREATH_DECAY, "+" + BREATH_ATTACK);
+
+            triggerVisualPulse(velocity);
+        }
+
+        function triggerVisualPulse(velocity) {
+            orb.classList.add('pulse');
+            const intensity = velocity / 127;
+            document.documentElement.style.setProperty('--circle-active', `rgba(232, 230, 217, ${0.1 + (intensity * 0.4)})`); // Opacidad más suave
+
+            setTimeout(() => {
+                orb.classList.remove('pulse');
+            }, 150); 
+        }
+
+    </script>
+</body>
+</html>
