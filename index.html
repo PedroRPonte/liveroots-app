@@ -169,6 +169,7 @@
         function setupAudioEngine() {
             // A. MELODÍA (Cristal / Kalimba Suave)
             synth = new Tone.PolySynth(Tone.FMSynth, {
+                maxPolyphony: 6, // <--- LIMITADOR DE POLIFONÍA (Evita saturación)
                 harmonicity: 3,
                 modulationIndex: 8, // Menos índice para sonido más dulce
                 oscillator: { type: "sine" },
@@ -186,6 +187,9 @@
                     release: 0.5
                 }
             });
+            
+            // Bajamos volumen del sintetizador melódico para dar espacio (headroom)
+            synth.volume.value = -6; 
 
             // B. AMBIENTE (Sintético y Sutil)
             ambientNoise = new Tone.Noise("pink"); 
